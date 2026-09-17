@@ -1,65 +1,3 @@
-<?php
-// ==================== CẤU HÌNH ====================
-$discordWebhook = "https://discordapp.com/api/webhooks/1549960938977759333/DSV_CJDbWtrMCk3O6LpKs7pmak06OWPBOykk4v-gNV0Ag-5OmoodkWQXcJkDuzDWxZIC"; // ← Thay bằng Webhook của bạn
-$logFile        = "access.log";
-$timezone       = "Asia/Ho_Chi_Minh";
-
-// ==================== LẤY THÔNG TIN ====================
-date_default_timezone_set($timezone);
-
-$ip        = $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
-$userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
-$time      = date('Y-m-d H:i:s');
-$referer   = $_SERVER['HTTP_REFERER'] ?? 'Truy cập trực tiếp';
-
-// Lấy IP thật nếu đi qua proxy (Cloudflare, Nginx,...)
-if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-    $ip = trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0]);
-} elseif (!empty($_SERVER['HTTP_CLIENT_IP'])) {
-    $ip = $_SERVER['HTTP_CLIENT_IP'];
-}
-
-// ==================== GHI LOG FILE ====================
-$logEntry = sprintf("[%s] IP: %-15s | Agent: %s | Referer: %s\n", $time, $ip, $userAgent, $referer);
-file_put_contents($logFile, $logEntry, FILE_APPEND | LOCK_EX);
-
-// ==================== GỬI DISCORD ====================
-function sendToDiscord($webhook, $ip, $userAgent, $time, $referer) {
-    if (empty($webhook) || strpos($webhook, 'XXXXXXXX') !== false) return; // chưa cấu hình
-
-    $embed = [
-        "title"       => "👤 Có người truy cập trang đếm ngược!",
-        "color"       => 15237697, // màu vàng #E8B341
-        "fields"      => [
-            ["name" => "🕒 Thời gian", "value" => $time, "inline" => true],
-            ["name" => "🌐 IP", "value" => "`$ip`", "inline" => true],
-            ["name" => "🔗 Referer", "value" => $referer, "inline" => false],
-            ["name" => "📱 User-Agent", "value" => "```" . substr($userAgent, 0, 200) . "```", "inline" => false],
-        ],
-        "footer"      => ["text" => "Đếm ngược năm mới"],
-        "timestamp"   => date('c')
-    ];
-
-    $payload = json_encode([
-        "username"   => "New Year Logger",
-        "avatar_url" => "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
-        "embeds"     => [$embed]
-    ]);
-
-    $ch = curl_init($webhook);
-    curl_setopt_array($ch, [
-        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => $payload,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 3
-    ]);
-    curl_exec($ch);
-    curl_close($ch);
-}
-
-sendToDiscord($discordWebhook, $ip, $userAgent, $time, $referer);
-?>
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -191,7 +129,6 @@ sendToDiscord($discordWebhook, $ip, $userAgent, $time, $referer);
   }
   :root[data-theme="light"] .so{text-shadow:none}
   .nhan{font-size:clamp(.7rem,2.2vw,.92rem);color:var(--muc-mo);font-weight:300}
-  .giay{transition:opacity .25s}
 
   .chan{display:flex;flex-direction:column;align-items:center;gap:18px}
   .ngay-dich{font-size:clamp(.82rem,2.3vw,.95rem);color:var(--muc-mo);margin:0}
@@ -240,7 +177,7 @@ sendToDiscord($discordWebhook, $ip, $userAgent, $time, $referer);
     <div class="o"><span class="so" id="ngay">00</span><span class="nhan">ngày</span></div>
     <div class="o"><span class="so" id="gio">00</span><span class="nhan">giờ</span></div>
     <div class="o"><span class="so" id="phut">00</span><span class="nhan">phút</span></div>
-    <div class="o"><span class="so giay" id="giay">00</span><span class="nhan">giây</span></div>
+    <div class="o"><span class="so" id="giay">00</span><span class="nhan">giây</span></div>
   </div>
 
   <div class="mung">
@@ -257,6 +194,55 @@ sendToDiscord($discordWebhook, $ip, $userAgent, $time, $referer);
 <script>
 (function(){
   "use strict";
+
+  // ============================================================
+  //  CẤU HÌNH DISCORD WEBHOOK
+  //  1. Vào Discord → Channel Settings → Integrations → Webhooks → New Webhook
+  //  2. Copy URL dán vào dòng dưới
+  // ============================================================
+  var DISCORD_WEBHOOK = "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN";
+
+  // Gửi thông báo Discord (chỉ gửi 1 lần mỗi phiên)
+  function guiDiscord(ip, agent, thoiGian) {
+    if (!DISCORD_WEBHOOK || DISCORD_WEBHOOK.indexOf("YOUR_WEBHOOK") !== -1) return;
+
+    var payload = {
+      username: "New Year Logger",
+      avatar_url: "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
+      embeds: [{
+        title: "👤 Có người truy cập trang đếm ngược!",
+        color: 15237697,
+        fields: [
+          { name: "🕒 Thời gian", value: thoiGian, inline: true },
+          { name: "🌐 IP", value: "`" + ip + "`", inline: true },
+          { name: "📱 User-Agent", value: "```" + (agent || "unknown").slice(0, 180) + "```" }
+        ],
+        footer: { text: "Đếm ngược năm mới" },
+        timestamp: new Date().toISOString()
+      }]
+    };
+
+    fetch(DISCORD_WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).catch(function(){});
+  }
+
+  // Lấy IP công cộng rồi gửi Discord
+  (function logVisitor() {
+    var agent = navigator.userAgent || "unknown";
+    var thoiGian = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+
+    fetch("https://api.ipify.org?format=json")
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        guiDiscord(data.ip || "unknown", agent, thoiGian);
+      })
+      .catch(function(){
+        guiDiscord("không xác định", agent, thoiGian);
+      });
+  })();
 
   // ---- Các mốc (giờ Việt Nam, UTC+7) ----
   var TET_AM = ["2027-02-06","2028-01-26","2029-02-13","2030-02-03","2031-01-23"];
